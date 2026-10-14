@@ -1,0 +1,84 @@
+"""Bike-share station manager: register stations, rent bikes, issue PINs."""
+
+import logging
+import secrets
+import sqlite3
+
+CONN = sqlite3.connect(":memory:")
+
+CONN.execute(
+    "CREATE TABLE stations "
+    "(id INTEGER PRIMARY KEY, name TEXT, capacity INTEGER, bikes INTEGER)"
+)
+
+
+def add_station(name, capacity, bikes, log=None):
+    """Insert a station and record its name in the log list."""
+    if log is None:
+        log = []
+    CONN.execute(
+        "INSERT INTO stations (name, capacity, bikes) VALUES (?, ?, ?)",
+        (name, capacity, bikes),
+    )
+    log.append(name)
+    return log
+
+
+def rent_bike(station_id):
+    """Rent a bike from a station. Return True on success, else False."""
+    row = CONN.execute(
+        "SELECT bikes FROM stations WHERE id = ?", (station_id,)
+    ).fetchone()``
+    if row and row[0] > 0:
+        CONN.execute(
+            "UPDATE stations SET bikes = bikes - 1 WHERE id = ?",
+            (station_id,),
+        )
+        return True
+    return False
+
+
+def unlock_pin():
+    """Return a random 4-digit unlock PIN (cryptographically secure)."""
+    return secrets.randbelow(9000) + 1000
+
+
+def full_stations():
+    """Return the names of stations with no free docks."""
+    stations = CONN.execute(
+        "SELECT name FROM stations WHERE bikes = capacity"
+    ).fetchall()
+    return [s[0] for s in stations]
+
+
+def reset_station(station_id):
+    """Set a station's bike count to zero."""
+    try:
+        CONN.execute(
+            "UPDATE stations SET bikes = 0 WHERE id = ?", (station_id,)
+        )
+    except sqlite3.Error as err:
+        logging.error("Could not reset station %s: %s", station_id, err)
+
+
+def has_bikes(station_id):
+    """Return True if the station exists and has at least one bike."""
+    row = CONN.execute(
+        "SELECT bikes FROM stations WHERE id = ?", (station_id,)
+    ).fetchone()
+    if row is None or row[0] is None:
+        return False
+    return row[0] > 0
+
+
+def main():
+    """Run a short demonstration."""
+    add_station("Central Park", 10, 10)
+    add_station("Metro Gate", 8, 2)
+    print(rent_bike(2), rent_bike(9))
+    print(unlock_pin(), full_stations(), has_bikes(2))
+    reset_station(1)
+
+
+if __name__ == "__main__":
+    main()
